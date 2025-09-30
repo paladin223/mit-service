@@ -1,0 +1,236 @@
+openapi: 3.0.3
+info:
+  title: MIT Service API
+  description: API for database interaction service with inbox pattern
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /insert:
+    post:
+      summary: Insert a new record
+      description: Insert a new record with id and JSON value
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsertRequest'
+            example:
+              id: "user_123"
+              value:
+                name: "John Doe"
+                age: 30
+                email: "john@example.com"
+      responses:
+        '201':
+          description: Record created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /update:
+    post:
+      summary: Update an existing record
+      description: Update an existing record by id with new JSON value
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRequest'
+            example:
+              id: "user_123"
+              value:
+                name: "John Smith"
+                age: 31
+                email: "johnsmith@example.com"
+      responses:
+        '200':
+          description: Record updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /delete:
+    post:
+      summary: Delete a record
+      description: Delete a record by id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRequest'
+            example:
+              id: "user_123"
+      responses:
+        '200':
+          description: Record deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /get:
+    get:
+      summary: Get a record by id
+      description: Retrieve a record by its id
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The id of the record to retrieve
+          example: "user_123"
+      responses:
+        '200':
+          description: Record retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetResponse'
+              example:
+                id: "user_123"
+                value:
+                  name: "John Doe"
+                  age: 30
+                  email: "john@example.com"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    InsertRequest:
+      type: object
+      required:
+        - id
+        - value
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the record
+          minLength: 1
+        value:
+          type: object
+          description: JSON object to store as value
+          additionalProperties: true
+
+    UpdateRequest:
+      type: object
+      required:
+        - id
+        - value
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the record
+          minLength: 1
+        value:
+          type: object
+          description: JSON object to store as value
+          additionalProperties: true
+
+    DeleteRequest:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the record to delete
+          minLength: 1
+
+    GetResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the record
+        value:
+          type: object
+          description: JSON object stored as value
+          additionalProperties: true
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
