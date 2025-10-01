@@ -39,6 +39,9 @@ type Metrics struct {
 
 	mu                sync.RWMutex
 	lastMetricsUpdate time.Time
+
+	// Prometheus metrics
+	prometheus *PrometheusMetrics
 }
 
 // NewMetrics creates a new metrics instance
@@ -46,6 +49,7 @@ func NewMetrics() *Metrics {
 	return &Metrics{
 		startTime:         time.Now(),
 		lastMetricsUpdate: time.Now(),
+		prometheus:        NewPrometheusMetrics(),
 	}
 }
 
@@ -64,6 +68,19 @@ func (m *Metrics) RecordHTTPRequest(duration time.Duration, success bool) {
 
 	m.lastRequestTime = time.Now()
 	m.updateHTTPMetrics()
+}
+
+// RecordHTTPRequestWithDetails records an HTTP request with detailed information for Prometheus
+func (m *Metrics) RecordHTTPRequestWithDetails(method, endpoint string, statusCode int, duration time.Duration) {
+	// Update internal metrics
+	success := statusCode >= 200 && statusCode < 400
+	m.RecordHTTPRequest(duration, success)
+	
+	// Update Prometheus metrics
+	if m.prometheus != nil {
+		m.prometheus.RecordHTTPRequest(method, endpoint, statusCode, duration)
+		m.prometheus.SetActiveConnections(atomic.LoadInt64(&m.activeConnections))
+	}
 }
 
 // IncrementActiveConnections increments active connection count
@@ -119,6 +136,21 @@ func (m *Metrics) RecordTaskExecution(duration time.Duration, success bool) {
 	m.updateTaskMetrics()
 }
 
+// RecordTaskExecutionWithDetails records a task execution with detailed information for Prometheus
+func (m *Metrics) RecordTaskExecutionWithDetails(operation string, duration time.Duration, success bool) {
+	// Update internal metrics
+	m.RecordTaskExecution(duration, success)
+	
+	// Update Prometheus metrics
+	if m.prometheus != nil {
+		status := "completed"
+		if !success {
+			status = "failed"
+		}
+		m.prometheus.RecordTask(operation, status, duration)
+	}
+}
+
 // SetQueueDepth sets the current queue depth
 func (m *Metrics) SetQueueDepth(depth int64) {
 	atomic.StoreInt64(&m.queueDepth, depth)
@@ -129,6 +161,12 @@ func (m *Metrics) SetQueueDepth(depth int64) {
 		if depth <= current || atomic.CompareAndSwapInt64(&m.maxQueueDepth, current, depth) {
 			break
 		}
+	}
+
+	// Update Prometheus metrics
+	if m.prometheus != nil {
+		maxDepth := atomic.LoadInt64(&m.maxQueueDepth)
+		m.prometheus.SetQueueMetrics(depth, maxDepth)
 	}
 }
 
@@ -167,6 +205,12 @@ func (m *Metrics) UpdateSystemMetrics() {
 
 	m.goroutineCount = runtime.NumGoroutine()
 	m.memoryUsage = memStats.Alloc
+
+	// Update Prometheus metrics
+	if m.prometheus != nil {
+		uptime := time.Since(m.startTime)
+		m.prometheus.SetSystemMetrics(m.goroutineCount, m.memoryUsage, uptime)
+	}
 }
 
 // GetSnapshot returns a snapshot of all metrics

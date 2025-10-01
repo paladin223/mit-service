@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Handler handles HTTP requests
@@ -322,6 +324,11 @@ func (h *Handler) withCORS(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+// PrometheusMetrics endpoint for Prometheus
+func (h *Handler) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	promhttp.Handler().ServeHTTP(w, r)
+}
+
 // Middleware wrapper for logging
 func (h *Handler) withLogging(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -356,9 +363,8 @@ func (h *Handler) withMetrics(next http.HandlerFunc) http.HandlerFunc {
 		// Execute the request
 		next(rw, r)
 
-		// Record metrics
+		// Record metrics with detailed information for Prometheus
 		duration := time.Since(start)
-		success := rw.statusCode >= 200 && rw.statusCode < 400
-		h.metrics.RecordHTTPRequest(duration, success)
+		h.metrics.RecordHTTPRequestWithDetails(r.Method, r.URL.Path, rw.statusCode, duration)
 	})
 }

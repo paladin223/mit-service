@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Database Population Script
-Populate database with 100k records before load testing
+Load Testing Script
+Generate controlled load with N requests per second
 """
 
 import asyncio
@@ -9,28 +9,37 @@ import aiohttp
 import hashlib
 import time
 import sys
+import signal
+from typing import Optional
 
 
-class DatabasePopulator:
-    def __init__(self, base_url: str, total_records: int = 100000, batch_size: int = 100, start_id: int = 1):
+class LoadTester:
+    def __init__(self, base_url: str, rps: int = 100, duration: int = 60, start_id: int = 1):
         self.base_url = base_url.rstrip('/')
-        self.total_records = total_records
-        self.batch_size = batch_size
+        self.rps = rps  # requests per second
+        self.duration = duration  # test duration in seconds
         self.start_id = start_id
-        self.inserted = 0
-        self.errors = 0
+        
+        # Statistics
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.failed_requests = 0
+        self.current_record_id = start_id
+        
+        # Control
+        self.running = True
+        self.start_time = None
     
     def generate_record_id(self, record_number: int) -> str:
-        """Generate record ID as MD5(abcdefg + number) starting from start_id"""
-        record_id = self.start_id + record_number  # Start from start_id
-        base_string = f"abcdefg{record_id}"
+        """Generate record ID as MD5(abcdefg + number)"""
+        base_string = f"abcdefg{record_number}"
         return hashlib.md5(base_string.encode()).hexdigest()
     
     def generate_record_data(self, record_number: int) -> dict:
         """Generate test data for record"""
         return {
-            "name": f"Test User {record_number}",
-            "email": f"user{record_number}@example.com",
+            "name": f"Load Test User {record_number}",
+            "email": f"loadtest{record_number}@example.com",
             "age": 20 + (record_number % 60),
             "city": f"City {record_number % 100}",
             "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -38,14 +47,14 @@ class DatabasePopulator:
             "department": f"Dept {record_number % 10}",
             "salary": 30000 + (record_number % 70000),
             "metadata": {
-                "populated": True,
-                "batch": record_number // self.batch_size,
-                "test_data": True
+                "load_test": True,
+                "test_data": True,
+                "timestamp": time.time()
             }
         }
     
-    async def insert_record(self, session: aiohttp.ClientSession, record_number: int):
-        """Insert single record"""
+    async def send_request(self, session: aiohttp.ClientSession, record_number: int) -> bool:
+        """Send single insert request"""
         record_id = self.generate_record_id(record_number)
         data = self.generate_record_data(record_number)
         
@@ -57,33 +66,57 @@ class DatabasePopulator:
         try:
             async with session.post(f"{self.base_url}/insert", json=payload) as response:
                 if 200 <= response.status < 300:
-                    self.inserted += 1
+                    self.successful_requests += 1
                     return True
                 else:
-                    self.errors += 1
+                    self.failed_requests += 1
                     return False
         except Exception:
-            self.errors += 1
+            self.failed_requests += 1
             return False
     
-    async def populate_batch(self, session: aiohttp.ClientSession, start_number: int, batch_size: int):
-        """Populate batch of records"""
+    async def send_batch(self, session: aiohttp.ClientSession, batch_size: int) -> tuple[int, int]:
+        """Send batch of requests concurrently"""
         tasks = []
-        for i in range(start_number, min(start_number + batch_size, self.total_records)):
-            task = self.insert_record(session, i)
+        start_record = self.current_record_id
+        
+        for i in range(batch_size):
+            task = self.send_request(session, self.current_record_id + i)
             tasks.append(task)
         
+        self.current_record_id += batch_size
+        self.total_requests += batch_size
+        
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        return sum(1 for r in results if r is True)
+        successful = sum(1 for r in results if r is True)
+        failed = batch_size - successful
+        
+        return successful, failed
     
-    async def populate_database(self):
-        """Main population function"""
-        end_id = self.start_id + self.total_records - 1
-        print(f"🚀 Starting database population:")
-        print(f"   Target: {self.total_records:,} records")
-        print(f"   ID range: {self.start_id} to {end_id}")
-        print(f"   Batch size: {self.batch_size}")
+    def print_status(self, elapsed_time: float, current_rps: float):
+        """Print current status"""
+        success_rate = (self.successful_requests / self.total_requests * 100) if self.total_requests > 0 else 0
+        avg_rps = self.total_requests / elapsed_time if elapsed_time > 0 else 0
+        
+        remaining_time = max(0, self.duration - elapsed_time)
+        
+        print(f"\r⚡ Load Test | "
+              f"Time: {elapsed_time:5.1f}s/{self.duration}s | "
+              f"RPS: {current_rps:5.1f} (target: {self.rps}) | "
+              f"Avg RPS: {avg_rps:5.1f} | "
+              f"Total: {self.total_requests:6,} | "
+              f"✅ {self.successful_requests:5,} | "
+              f"❌ {self.failed_requests:4,} | "
+              f"Success: {success_rate:5.1f}% | "
+              f"ETA: {remaining_time:4.0f}s", end="", flush=True)
+    
+    async def run_load_test(self):
+        """Run the load test"""
+        print(f"🚀 Starting Load Test:")
+        print(f"   Target RPS: {self.rps}")
+        print(f"   Duration: {self.duration}s")
         print(f"   URL: {self.base_url}")
+        print(f"   Expected total requests: ~{self.rps * self.duration:,}")
         print()
         
         # Check if service is available
@@ -98,96 +131,120 @@ class DatabasePopulator:
             print(f"❌ Cannot connect to service: {e}")
             return
         
-        start_time = time.time()
-        connector = aiohttp.TCPConnector(limit=50)
+        print("\nStarting load test... Press Ctrl+C to stop early\n")
+        
+        self.start_time = time.time()
+        connector = aiohttp.TCPConnector(limit=100)
         
         async with aiohttp.ClientSession(
             connector=connector,
-            timeout=aiohttp.ClientTimeout(total=30)
+            timeout=aiohttp.ClientTimeout(total=10)
         ) as session:
             
             batch_number = 0
-            for start in range(0, self.total_records, self.batch_size):
+            
+            while self.running:
+                batch_start_time = time.time()
+                elapsed_time = batch_start_time - self.start_time
+                
+                # Stop if duration exceeded
+                if elapsed_time >= self.duration:
+                    break
+                
                 batch_number += 1
-                batch_start = time.time()
                 
-                # Process batch
-                batch_success = await self.populate_batch(session, start, self.batch_size)
+                # Send batch
+                try:
+                    successful, failed = await self.send_batch(session, self.rps)
+                except Exception as e:
+                    print(f"\n❌ Error in batch {batch_number}: {e}")
+                    failed += self.rps
                 
-                batch_time = time.time() - batch_start
-                progress = (start + self.batch_size) / self.total_records * 100
+                batch_end_time = time.time()
+                batch_duration = batch_end_time - batch_start_time
+                actual_rps = self.rps / batch_duration if batch_duration > 0 else 0
                 
-                # Progress update
-                if batch_number % 10 == 0 or start + self.batch_size >= self.total_records:
-                    elapsed = time.time() - start_time
-                    rate = self.inserted / elapsed if elapsed > 0 else 0
-                    eta = (self.total_records - self.inserted) / rate if rate > 0 else 0
-                    
-                    print(f"Batch {batch_number:4d}: {progress:6.1f}% | "
-                          f"Inserted: {self.inserted:6,} | "
-                          f"Rate: {rate:6.1f}/s | "
-                          f"ETA: {eta:4.0f}s | "
-                          f"Batch time: {batch_time:.2f}s")
+                # Print status every second
+                self.print_status(elapsed_time, actual_rps)
+                
+                # Sleep to maintain 1 batch per second
+                sleep_time = max(0, 1.0 - batch_duration)
+                if sleep_time > 0:
+                    await asyncio.sleep(sleep_time)
         
-        total_time = time.time() - start_time
-        self.print_summary(total_time)
+        print("\n")  # New line after status updates
+        self.print_summary()
     
-    def print_summary(self, total_time: float):
-        """Print population summary"""
-        print("\n" + "="*80)
-        print("📊 DATABASE POPULATION SUMMARY")
-        print("="*80)
-        print(f"Total time: {total_time:.2f} seconds")
-        print(f"Records inserted: {self.inserted:,}")
-        print(f"Errors: {self.errors:,}")
-        print(f"Success rate: {(self.inserted / self.total_records * 100):.2f}%")
-        print(f"Average rate: {(self.inserted / total_time):.1f} records/second")
+    def print_summary(self):
+        """Print load test summary"""
+        if self.start_time is None:
+            return
+            
+        total_time = time.time() - self.start_time
+        avg_rps = self.total_requests / total_time if total_time > 0 else 0
+        success_rate = (self.successful_requests / self.total_requests * 100) if self.total_requests > 0 else 0
         
-        if self.inserted > 0:
-            start_hash = self.generate_record_id(0)[:8]
-            end_hash = self.generate_record_id(self.total_records-1)[:8] 
-            end_id = self.start_id + self.total_records - 1
-            print(f"\n✅ Database populated successfully!")
-            print(f"📝 Records with IDs from: {start_hash}... (abcdefg{self.start_id})")
-            print(f"📝                    to: {end_hash}... (abcdefg{end_id})")
-            print(f"\n🔥 Ready for load testing!")
+        print("\n" + "="*80)
+        print("📊 LOAD TEST SUMMARY")
+        print("="*80)
+        print(f"Duration: {total_time:.2f} seconds")
+        print(f"Target RPS: {self.rps}")
+        print(f"Actual Average RPS: {avg_rps:.1f}")
+        print(f"RPS Accuracy: {(avg_rps / self.rps * 100):.1f}%")
+        print()
+        print(f"Total Requests: {self.total_requests:,}")
+        print(f"Successful: {self.successful_requests:,}")
+        print(f"Failed: {self.failed_requests:,}")
+        print(f"Success Rate: {success_rate:.2f}%")
+        
+        if self.successful_requests > 0:
+            print(f"\n✅ Load test completed!")
+            print(f"📈 Created sustained load of ~{avg_rps:.0f} RPS")
         else:
-            print(f"\n❌ Population failed!")
+            print(f"\n❌ Load test failed!")
+    
+    def stop(self):
+        """Stop the load test"""
+        self.running = False
 
 
 async def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description='Populate database with test records')
+    parser = argparse.ArgumentParser(description='Generate controlled load for testing')
     parser.add_argument('--url', default='http://localhost:8080', 
                        help='Service URL (default: http://localhost:8080)')
-    parser.add_argument('--records', type=int, default=100000,
-                       help='Number of records to insert (default: 100,000)')
-    parser.add_argument('--batch', type=int, default=100,
-                       help='Batch size (default: 100)')
+    parser.add_argument('--rps', type=int, default=100,
+                       help='Requests per second (default: 100)')
+    parser.add_argument('--duration', type=int, default=60,
+                       help='Test duration in seconds (default: 60)')
     parser.add_argument('--start', type=int, default=1,
                        help='Start ID number (default: 1)')
     
     args = parser.parse_args()
     
-    if args.records <= 0 or args.batch <= 0 or args.start < 0:
-        print("❌ Records and batch size must be positive, start ID must be >= 0")
+    if args.rps <= 0 or args.duration <= 0 or args.start < 0:
+        print("❌ RPS and duration must be positive, start ID must be >= 0")
         sys.exit(1)
     
-    populator = DatabasePopulator(
+    load_tester = LoadTester(
         base_url=args.url,
-        total_records=args.records,
-        batch_size=args.batch,
+        rps=args.rps,
+        duration=args.duration,
         start_id=args.start
     )
     
+    # Handle Ctrl+C gracefully
+    def signal_handler(sig, frame):
+        print(f"\n\n⚠️  Load test interrupted by user")
+        load_tester.stop()
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
-        await populator.populate_database()
-    except KeyboardInterrupt:
-        print(f"\n\n⚠️  Population interrupted by user")
-        print(f"📊 Inserted {populator.inserted:,} out of {args.records:,} records")
+        await load_tester.run_load_test()
     except Exception as e:
-        print(f"\n\n❌ Error during population: {e}")
+        print(f"\n\n❌ Error during load test: {e}")
         sys.exit(1)
 
 

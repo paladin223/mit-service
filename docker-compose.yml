@@ -3,6 +3,7 @@ version: '3.8'
 services:
   postgres-main:
     image: postgres:15
+    container_name: postgres-main
     environment:
       POSTGRES_DB: mitservice
       POSTGRES_USER: postgres
@@ -28,6 +29,7 @@ services:
 
   postgres-inbox:
     image: postgres:15
+    container_name: postgres-inbox
     environment:
       POSTGRES_DB: mitservice_inbox
       POSTGRES_USER: postgres
@@ -53,6 +55,7 @@ services:
 
   mit-service:
     build: .
+    container_name: mit-service
     environment:
       - DB_HOST=postgres-main
       - DB_PORT=5432
@@ -68,7 +71,7 @@ services:
       - INBOX_DB_SSLMODE=disable
       - REPOSITORY_TYPE=postgres
       - PORT=8080
-      - INBOX_WORKER_COUNT=10
+      - INBOX_WORKER_COUNT=50
     ports:
       - "8080:8080"
     depends_on:
@@ -86,7 +89,63 @@ services:
           cpus: '0.5'
           memory: '512M'
 
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - default
+    depends_on:
+      - prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command:
+      - '--housekeeping_interval=30s'
+      - '--docker_only=true'
+    networks:
+      - default
+
 volumes:
   postgres_main_data:
   postgres_inbox_data:
+  prometheus_data:
+  grafana_data:
 

@@ -17,7 +17,7 @@ func SetupRoutes(service *service.Service, metrics *metrics.Metrics) *http.Serve
 	// Monitoring endpoints
 	mux.HandleFunc("/tasks", h.withCORS(h.withMetrics(h.withLogging(h.Tasks))))
 	mux.HandleFunc("/stats", h.withCORS(h.withMetrics(h.withLogging(h.TaskStats))))
-	mux.HandleFunc("/metrics", h.withCORS(h.withMetrics(h.withLogging(h.Metrics))))
+	mux.HandleFunc("/metrics", h.PrometheusMetrics) // No middleware to avoid recursive metrics
 	mux.HandleFunc("/performance", h.withCORS(h.withMetrics(h.withLogging(h.Performance))))
 
 	// API routes (root level as specified in requirements)

@@ -161,9 +161,9 @@ func (w *InboxWorker) processTask(ctx context.Context, workerID int, task *model
 
 	if processErr != nil {
 		w.handleTaskError(ctx, workerID, task, processErr)
-		// Record failed task metrics
+		// Record failed task metrics with operation details
 		duration := time.Since(startTime)
-		w.metrics.RecordTaskExecution(duration, false)
+		w.metrics.RecordTaskExecutionWithDetails(string(task.Operation), duration, false)
 		return
 	}
 
@@ -174,8 +174,8 @@ func (w *InboxWorker) processTask(ctx context.Context, workerID int, task *model
 	} else {
 		duration := time.Since(startTime)
 		log.Printf("Worker %d: task %s completed successfully in %v", workerID, task.ID, duration.Round(time.Millisecond))
-		// Record successful task metrics
-		w.metrics.RecordTaskExecution(duration, true)
+		// Record successful task metrics with operation details
+		w.metrics.RecordTaskExecutionWithDetails(string(task.Operation), duration, true)
 	}
 }
 
