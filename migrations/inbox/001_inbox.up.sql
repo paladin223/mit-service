@@ -1,9 +1,3 @@
--- Create records table
-CREATE TABLE IF NOT EXISTS records (
-    id VARCHAR(255) PRIMARY KEY,
-    value JSONB NOT NULL
-);
-
 -- Create inbox_tasks table for the inbox pattern
 CREATE TABLE IF NOT EXISTS inbox_tasks (
     id VARCHAR(255) PRIMARY KEY,

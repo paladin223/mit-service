@@ -365,3 +365,21 @@ func (r *PostgresRepository) DeleteCompletedTasks(ctx context.Context, olderThan
 func (r *PostgresRepository) Close() error {
 	return r.db.Close()
 }
+
+// NewPostgresRecordRepository creates a new PostgreSQL repository for records
+func NewPostgresRecordRepository(connectionString string) (RecordRepository, error) {
+	repo, err := NewPostgresRepository(connectionString)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
+}
+
+// NewPostgresInboxRepository creates a new PostgreSQL repository for inbox
+func NewPostgresInboxRepository(connectionString string) (InboxRepository, error) {
+	repo, err := NewPostgresRepository(connectionString)
+	if err != nil {
+		return nil, err
+	}
+	return repo, nil
+}

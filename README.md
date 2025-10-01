@@ -60,8 +60,15 @@ curl http://localhost:8080/stats
 |----------|---------|-------------|
 | `PORT` | `8080` | HTTP server port |
 | `REPOSITORY_TYPE` | `postgres` | Repository type (`postgres`/`mock`) |
+| `DB_HOST` | `postgres-main` | Main PostgreSQL host |
+| `INBOX_DB_HOST` | `postgres-inbox` | Inbox PostgreSQL host |
+| `INBOX_DB_PORT` | `5433` | Inbox PostgreSQL port |
 | `INBOX_WORKER_COUNT` | `5` | Number of inbox workers |
 | `INBOX_BATCH_SIZE` | `10` | Task batch size |
+
+**Two separate databases:**
+- `postgres-main:5432` - Business records (`mitservice` database)  
+- `postgres-inbox:5433` - Inbox tasks (`mitservice_inbox` database)
 
 ## Example Usage
 

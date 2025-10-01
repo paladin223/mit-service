@@ -23,15 +23,34 @@ func NewRepository(cfg *config.Config) (Repository, error) {
 	}
 }
 
-// NewRepositoryManager creates a new repository manager
+// NewRepositoryManager creates a new repository manager with separate DBs
 func NewRepositoryManager(cfg *config.Config) (*RepositoryManager, error) {
-	repo, err := NewRepository(cfg)
-	if err != nil {
-		return nil, err
-	}
+	switch cfg.Repository.Type {
+	case "postgres":
+		// Create separate repositories for main and inbox DBs
+		recordRepo, err := NewPostgresRecordRepository(cfg.Database.ConnectionString())
+		if err != nil {
+			return nil, fmt.Errorf("failed to create postgres record repository: %w", err)
+		}
 
-	return &RepositoryManager{
-		Record: repo,
-		Inbox:  repo,
-	}, nil
+		inboxRepo, err := NewPostgresInboxRepository(cfg.InboxDB.ConnectionString())
+		if err != nil {
+			return nil, fmt.Errorf("failed to create postgres inbox repository: %w", err)
+		}
+
+		return &RepositoryManager{
+			Record: recordRepo,
+			Inbox:  inboxRepo,
+		}, nil
+
+	case "mock":
+		repo := NewMockRepository()
+		return &RepositoryManager{
+			Record: repo,
+			Inbox:  repo,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported repository type: %s", cfg.Repository.Type)
+	}
 }

@@ -8,10 +8,11 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	Server     ServerConfig
-	Database   DatabaseConfig
+	Server      ServerConfig
+	Database    DatabaseConfig
+	InboxDB     DatabaseConfig
 	InboxWorker InboxWorkerConfig
-	Repository RepositoryConfig
+	Repository  RepositoryConfig
 }
 
 // ServerConfig holds HTTP server configuration
@@ -33,11 +34,11 @@ type DatabaseConfig struct {
 
 // InboxWorkerConfig holds inbox pattern worker configuration
 type InboxWorkerConfig struct {
-	WorkerCount    int
-	BatchSize      int
-	PollInterval   time.Duration
-	MaxRetries     int
-	RetryDelay     time.Duration
+	WorkerCount  int
+	BatchSize    int
+	PollInterval time.Duration
+	MaxRetries   int
+	RetryDelay   time.Duration
 }
 
 // RepositoryConfig holds repository configuration
@@ -61,6 +62,14 @@ func LoadConfig() *Config {
 			DBName:   getEnv("DB_NAME", "mitservice"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
+		InboxDB: DatabaseConfig{
+			Host:     getEnv("INBOX_DB_HOST", "localhost"),
+			Port:     getEnv("INBOX_DB_PORT", "5433"),
+			User:     getEnv("INBOX_DB_USER", "postgres"),
+			Password: getEnv("INBOX_DB_PASSWORD", "password"),
+			DBName:   getEnv("INBOX_DB_NAME", "mitservice_inbox"),
+			SSLMode:  getEnv("INBOX_DB_SSLMODE", "disable"),
+		},
 		InboxWorker: InboxWorkerConfig{
 			WorkerCount:  getIntEnv("INBOX_WORKER_COUNT", 5),
 			BatchSize:    getIntEnv("INBOX_BATCH_SIZE", 10),
@@ -76,8 +85,8 @@ func LoadConfig() *Config {
 
 // ConnectionString returns the database connection string
 func (c *DatabaseConfig) ConnectionString() string {
-	return "host=" + c.Host + " port=" + c.Port + " user=" + c.User + 
-		   " password=" + c.Password + " dbname=" + c.DBName + " sslmode=" + c.SSLMode
+	return "host=" + c.Host + " port=" + c.Port + " user=" + c.User +
+		" password=" + c.Password + " dbname=" + c.DBName + " sslmode=" + c.SSLMode
 }
 
 // Helper functions
@@ -107,4 +116,3 @@ func getDurationEnv(key string, defaultValue string) time.Duration {
 	}
 	return time.Second * 10
 }
-

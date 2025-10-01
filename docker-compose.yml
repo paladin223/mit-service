@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  postgres:
+  postgres-main:
     image: postgres:15
     environment:
       POSTGRES_DB: mitservice
@@ -10,8 +10,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
+      - postgres_main_data:/var/lib/postgresql/data
+      - ./migrations/main:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d mitservice"]
       interval: 10s
@@ -20,27 +20,60 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: '1G'
+          cpus: '0.5'
+          memory: '512M'
         reservations:
-          cpus: '0.25'
-          memory: '256M'
+          cpus: '0.1'
+          memory: '128M'
+
+  postgres-inbox:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: mitservice_inbox
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_inbox_data:/var/lib/postgresql/data
+      - ./migrations/inbox:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mitservice_inbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: '512M'
+        reservations:
+          cpus: '0.1'
+          memory: '128M'
 
   mit-service:
     build: .
     environment:
-      - DB_HOST=postgres
+      - DB_HOST=postgres-main
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=password
       - DB_NAME=mitservice
       - DB_SSLMODE=disable
+      - INBOX_DB_HOST=postgres-inbox
+      - INBOX_DB_PORT=5432
+      - INBOX_DB_USER=postgres
+      - INBOX_DB_PASSWORD=password
+      - INBOX_DB_NAME=mitservice_inbox
+      - INBOX_DB_SSLMODE=disable
       - REPOSITORY_TYPE=postgres
       - PORT=8080
     ports:
       - "8080:8080"
     depends_on:
-      postgres:
+      postgres-main:
+        condition: service_healthy
+      postgres-inbox:
         condition: service_healthy
     restart: unless-stopped
     deploy:
@@ -53,5 +86,6 @@ services:
           memory: '512M'
 
 volumes:
-  postgres_data:
+  postgres_main_data:
+  postgres_inbox_data:
 
