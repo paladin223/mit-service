@@ -30,18 +30,19 @@ python3 scripts/load_test.py --rps 50 --tasks 100
 ## Load Testing
 
 ```bash
-# Basic test (5 RPS, 10 tasks)
-python3 scripts/load_test.py --rps 5 --tasks 10
+# Basic test (5 RPS, 10 tasks, max 60s)
+python3 scripts/load_test.py --rps 5 --tasks 10 --max-duration 60
 
-# Medium load (50 RPS, 200 tasks)  
-python3 scripts/load_test.py --rps 50 --tasks 200
+# Medium load (50 RPS, 200 tasks, max 120s)  
+python3 scripts/load_test.py --rps 50 --tasks 200 --max-duration 120
 
-# High load (200 RPS, 500 tasks)
-python3 scripts/load_test.py --rps 200 --tasks 500 --timeout 30
+# High load (200 RPS, 500 tasks, max 300s)
+python3 scripts/load_test.py --rps 200 --tasks 500 --max-duration 300
 ```
 
 Each task: INSERT → UPDATE → GET  
-ID = MD5(abcdefg + task_number)
+INSERT/UPDATE: ID = MD5(abcdefg + (1000000 + task_number))  
+GET: ID = MD5(abcdefg + (1 + task_number % 100000))
 
 ## Monitoring
 

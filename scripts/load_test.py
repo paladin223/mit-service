@@ -2,7 +2,8 @@
 """
 MIT Service Load Testing Script
 For each task: INSERT -> UPDATE -> GET
-ID = MD5(abcdefg + task_number)
+INSERT/UPDATE: ID = MD5(abcdefg + (1000000 + task_number))
+GET: ID = MD5(abcdefg + (1 + task_number % 100000))
 """
 
 import asyncio
@@ -52,17 +53,25 @@ class TestStats:
 class LoadTester:
     """Класс для проведения нагрузочного тестирования"""
     
-    def __init__(self, base_url: str, rps: int, tasks_count: int, timeout: int = 10):
+    def __init__(self, base_url: str, rps: int, tasks_count: int, timeout: int = 10, max_duration: int = 300):
         self.base_url = base_url.rstrip('/')
         self.rps = rps
         self.tasks_count = tasks_count
         self.timeout = aiohttp.ClientTimeout(total=timeout)
+        self.max_duration = max_duration  # Максимальное время выполнения в секундах
         self.stats = TestStats()
         self.request_semaphore = asyncio.Semaphore(rps * 2)  # Ограничиваем concurrent requests
         
-    def generate_task_id(self, task_number: int) -> str:
-        """Генерирует ID задачи как хеш от 'abcdefg' + номер задачи"""
-        base_string = f"abcdefg{task_number}"
+    def generate_insert_id(self, task_number: int) -> str:
+        """Генерирует ID для INSERT/UPDATE начиная с 1000000"""
+        insert_id = 1000000 + task_number
+        base_string = f"abcdefg{insert_id}"
+        return hashlib.md5(base_string.encode()).hexdigest()
+    
+    def generate_get_id(self, task_number: int) -> str:
+        """Генерирует ID для GET начиная с 1"""
+        get_id = 1 + (task_number % 100000)  # Циклически от 1 до 100000
+        base_string = f"abcdefg{get_id}"
         return hashlib.md5(base_string.encode()).hexdigest()
     
     def generate_test_data(self, request_number: int) -> Dict:
@@ -108,13 +117,14 @@ class LoadTester:
     
     async def execute_task_sequence(self, session: aiohttp.ClientSession, task_number: int):
         """Выполняет последовательность запросов для одной задачи"""
-        task_id = self.generate_task_id(task_number)
+        insert_id = self.generate_insert_id(task_number)  # ID для добавления (от 1000000)
+        get_id = self.generate_get_id(task_number)        # ID для поиска (от 1)
         request_number = task_number * 2  # Стартовый номер запроса для этой задачи
         
-        # 1. INSERT запрос (запись 1)
+        # 1. INSERT запрос (запись 1) - используем insert_id (от 1000000)
         request_number += 1
         test_data = self.generate_test_data(request_number)
-        insert_data = {"id": task_id, "value": test_data}
+        insert_data = {"id": insert_id, "value": test_data}
         
         success, status, result, response_time = await self.make_request(
             session, 'POST', '/insert', insert_data
@@ -132,11 +142,11 @@ class LoadTester:
             self.stats.insert_failed += 1
             print(f"❌ INSERT task {task_number}: {status} - {result} ({response_time:.3f}s)")
         
-        # 2. UPDATE запрос (запись 2)
+        # 2. UPDATE запрос (запись 2) - используем insert_id (тот же что и для INSERT)
         request_number += 1
         updated_data = self.generate_test_data(request_number)
         updated_data["updated"] = True
-        update_data = {"id": task_id, "value": updated_data}
+        update_data = {"id": insert_id, "value": updated_data}
         
         success, status, result, response_time = await self.make_request(
             session, 'POST', '/update', update_data
@@ -154,9 +164,9 @@ class LoadTester:
             self.stats.update_failed += 1
             print(f"❌ UPDATE task {task_number}: {status} - {result} ({response_time:.3f}s)")
         
-        # 3. GET запрос (чтение)
+        # 3. GET запрос (чтение) - используем get_id (от 1)
         success, status, result, response_time = await self.make_request(
-            session, 'GET', '/get', params={'id': task_id}
+            session, 'GET', '/get', params={'id': get_id}
         )
         
         self.stats.total_requests += 1
@@ -173,11 +183,14 @@ class LoadTester:
     
     async def run_load_test(self):
         """Запускает нагрузочное тестирование"""
+        estimated_time = (self.tasks_count * 3) / self.rps
         print(f"🚀 Запуск нагрузочного тестирования:")
         print(f"   URL: {self.base_url}")
         print(f"   RPS: {self.rps}")
         print(f"   Задач: {self.tasks_count}")
         print(f"   Всего запросов: {self.tasks_count * 3}")
+        print(f"   Ожидаемое время: {estimated_time:.1f}s")
+        print(f"   Максимальное время: {self.max_duration}s")
         print()
         
         self.stats.start_time = time.time()
@@ -214,8 +227,20 @@ class LoadTester:
                 )
                 tasks.append(task)
             
-            # Ждем выполнения всех задач
-            await asyncio.gather(*tasks, return_exceptions=True)
+            # Ждем выполнения всех задач с ограничением по времени
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True),
+                    timeout=self.max_duration
+                )
+            except asyncio.TimeoutError:
+                print(f"\n⏰ Тестирование прервано по таймауту ({self.max_duration}s)")
+                # Отменяем оставшиеся задачи
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                # Ждем отмены
+                await asyncio.gather(*tasks, return_exceptions=True)
         
         self.stats.end_time = time.time()
         self.print_stats()
@@ -235,6 +260,12 @@ class LoadTester:
         print(f"Время выполнения: {self.stats.duration:.2f} сек")
         print(f"Заданный RPS: {self.rps}")
         print(f"Фактический RPS: {self.stats.actual_rps:.2f}")
+        
+        if self.stats.duration >= self.max_duration * 0.95:
+            print(f"⚠️  Тест прерван по таймауту ({self.max_duration}s)")
+        elif self.stats.total_requests < self.tasks_count * 3:
+            completion_rate = (self.stats.total_requests / (self.tasks_count * 3)) * 100
+            print(f"⚠️  Тест завершен частично: {completion_rate:.1f}%")
         print(f"Всего запросов: {self.stats.total_requests}")
         print(f"Успешных запросов: {self.stats.successful_requests}")
         print(f"Неудачных запросов: {self.stats.failed_requests}")
@@ -270,6 +301,8 @@ async def main():
                        help='Количество задач для тестирования (по умолчанию: 100)')
     parser.add_argument('--timeout', type=int, default=10,
                        help='Таймаут запросов в секундах (по умолчанию: 10)')
+    parser.add_argument('--max-duration', type=int, default=300,
+                       help='Максимальное время выполнения теста в секундах (по умолчанию: 300)')
     
     args = parser.parse_args()
     
@@ -281,7 +314,8 @@ async def main():
         base_url=args.url,
         rps=args.rps,
         tasks_count=args.tasks,
-        timeout=args.timeout
+        timeout=args.timeout,
+        max_duration=args.max_duration
     )
     
     try:

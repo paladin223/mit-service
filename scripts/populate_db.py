@@ -20,8 +20,9 @@ class DatabasePopulator:
         self.errors = 0
     
     def generate_record_id(self, record_number: int) -> str:
-        """Generate record ID as MD5(abcdefg + number) - same format as load test"""
-        base_string = f"abcdefg{record_number}"
+        """Generate record ID as MD5(abcdefg + number) starting from 1"""
+        record_id = record_number + 1  # Start from 1, not 0
+        base_string = f"abcdefg{record_id}"
         return hashlib.md5(base_string.encode()).hexdigest()
     
     def generate_record_data(self, record_number: int) -> dict:
