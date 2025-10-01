@@ -42,7 +42,7 @@ while true; do
                 ;;
         esac
         
-        echo -e "Health Status: ${STATUS_COLOR}${HEALTH_STATUS^^} (${HEALTH_SCORE}/100)\033[0m"
+        echo -e "Health Status: ${STATUS_COLOR}$(echo "$HEALTH_STATUS" | tr '[:lower:]' '[:upper:]') (${HEALTH_SCORE}/100)\033[0m"
         
         # Show issues if any
         ISSUES=$(echo "$PERF_DATA" | jq -r '.health.issues[]?' 2>/dev/null)

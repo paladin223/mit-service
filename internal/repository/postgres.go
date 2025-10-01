@@ -184,17 +184,23 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, task *models.InboxT
 	return nil
 }
 
-// GetPendingTasks retrieves pending tasks from the inbox
+// GetPendingTasks retrieves pending tasks from the inbox and atomically marks them as processing
 func (r *PostgresRepository) GetPendingTasks(ctx context.Context, limit int) ([]*models.InboxTask, error) {
-	query := `SELECT id, operation, payload, status, created_at, updated_at, retries, error
-			  FROM inbox_tasks 
-			  WHERE status = $1 
-			  ORDER BY created_at ASC 
-			  LIMIT $2`
+	// Use UPDATE ... RETURNING to atomically claim tasks
+	query := `UPDATE inbox_tasks 
+			  SET status = $1, updated_at = NOW() 
+			  WHERE id IN (
+			      SELECT id FROM inbox_tasks 
+			      WHERE status = $2 
+			      ORDER BY created_at ASC 
+			      LIMIT $3 
+			      FOR UPDATE SKIP LOCKED
+			  ) 
+			  RETURNING id, operation, payload, status, created_at, updated_at, retries, error`
 
-	rows, err := r.db.QueryContext(ctx, query, models.TaskStatusPending, limit)
+	rows, err := r.db.QueryContext(ctx, query, models.TaskStatusProcessing, models.TaskStatusPending, limit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pending tasks: %w", err)
+		return nil, fmt.Errorf("failed to claim pending tasks: %w", err)
 	}
 	defer rows.Close()
 

@@ -68,6 +68,7 @@ services:
       - INBOX_DB_SSLMODE=disable
       - REPOSITORY_TYPE=postgres
       - PORT=8080
+      - INBOX_WORKER_COUNT=10
     ports:
       - "8080:8080"
     depends_on:

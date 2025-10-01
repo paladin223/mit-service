@@ -12,16 +12,17 @@ import sys
 
 
 class DatabasePopulator:
-    def __init__(self, base_url: str, total_records: int = 100000, batch_size: int = 100):
+    def __init__(self, base_url: str, total_records: int = 100000, batch_size: int = 100, start_id: int = 1):
         self.base_url = base_url.rstrip('/')
         self.total_records = total_records
         self.batch_size = batch_size
+        self.start_id = start_id
         self.inserted = 0
         self.errors = 0
     
     def generate_record_id(self, record_number: int) -> str:
-        """Generate record ID as MD5(abcdefg + number) starting from 1"""
-        record_id = record_number + 1  # Start from 1, not 0
+        """Generate record ID as MD5(abcdefg + number) starting from start_id"""
+        record_id = self.start_id + record_number  # Start from start_id
         base_string = f"abcdefg{record_id}"
         return hashlib.md5(base_string.encode()).hexdigest()
     
@@ -77,8 +78,10 @@ class DatabasePopulator:
     
     async def populate_database(self):
         """Main population function"""
+        end_id = self.start_id + self.total_records - 1
         print(f"🚀 Starting database population:")
         print(f"   Target: {self.total_records:,} records")
+        print(f"   ID range: {self.start_id} to {end_id}")
         print(f"   Batch size: {self.batch_size}")
         print(f"   URL: {self.base_url}")
         print()
@@ -141,9 +144,12 @@ class DatabasePopulator:
         print(f"Average rate: {(self.inserted / total_time):.1f} records/second")
         
         if self.inserted > 0:
+            start_hash = self.generate_record_id(0)[:8]
+            end_hash = self.generate_record_id(self.total_records-1)[:8] 
+            end_id = self.start_id + self.total_records - 1
             print(f"\n✅ Database populated successfully!")
-            print(f"📝 Records with IDs from: {self.generate_record_id(0)[:8]}...")
-            print(f"📝                    to: {self.generate_record_id(self.total_records-1)[:8]}...")
+            print(f"📝 Records with IDs from: {start_hash}... (abcdefg{self.start_id})")
+            print(f"📝                    to: {end_hash}... (abcdefg{end_id})")
             print(f"\n🔥 Ready for load testing!")
         else:
             print(f"\n❌ Population failed!")
@@ -159,17 +165,20 @@ async def main():
                        help='Number of records to insert (default: 100,000)')
     parser.add_argument('--batch', type=int, default=100,
                        help='Batch size (default: 100)')
+    parser.add_argument('--start', type=int, default=1,
+                       help='Start ID number (default: 1)')
     
     args = parser.parse_args()
     
-    if args.records <= 0 or args.batch <= 0:
-        print("❌ Records and batch size must be positive numbers")
+    if args.records <= 0 or args.batch <= 0 or args.start < 0:
+        print("❌ Records and batch size must be positive, start ID must be >= 0")
         sys.exit(1)
     
     populator = DatabasePopulator(
         base_url=args.url,
         total_records=args.records,
-        batch_size=args.batch
+        batch_size=args.batch,
+        start_id=args.start
     )
     
     try:

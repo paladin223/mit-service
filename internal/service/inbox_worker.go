@@ -144,13 +144,7 @@ func (w *InboxWorker) processTask(ctx context.Context, workerID int, task *model
 	startTime := time.Now()
 	log.Printf("Worker %d: starting processing task %s (operation: %s)", workerID, task.ID, task.Operation)
 
-	// Mark task as processing
-	err := w.repo.Inbox.UpdateTaskStatus(ctx, task.ID, models.TaskStatusProcessing, "")
-	if err != nil {
-		log.Printf("Worker %d: failed to update task %s status to processing: %v", workerID, task.ID, err)
-		return
-	}
-
+	// Task is already marked as processing by GetPendingTasks
 	var processErr error
 
 	// Process task based on operation
@@ -174,9 +168,9 @@ func (w *InboxWorker) processTask(ctx context.Context, workerID int, task *model
 	}
 
 	// Mark task as completed
-	err = w.repo.Inbox.UpdateTaskStatus(ctx, task.ID, models.TaskStatusCompleted, "")
-	if err != nil {
-		log.Printf("Worker %d: failed to update task %s status to completed: %v", workerID, task.ID, err)
+	updateErr := w.repo.Inbox.UpdateTaskStatus(ctx, task.ID, models.TaskStatusCompleted, "")
+	if updateErr != nil {
+		log.Printf("Worker %d: failed to update task %s status to completed: %v", workerID, task.ID, updateErr)
 	} else {
 		duration := time.Since(startTime)
 		log.Printf("Worker %d: task %s completed successfully in %v", workerID, task.ID, duration.Round(time.Millisecond))
@@ -251,6 +245,25 @@ func (w *InboxWorker) processInsertTask(ctx context.Context, payload []byte) err
 	}
 
 	if err := w.repo.Record.Insert(ctx, record); err != nil {
+		// Check if error is due to duplicate key (idempotency check)
+		if err.Error() == fmt.Sprintf("record with id '%s' already exists", record.ID) {
+			// Record already exists, check if it has the same value (idempotent operation)
+			existingRecord, getErr := w.repo.Record.Get(ctx, record.ID)
+			if getErr != nil {
+				return fmt.Errorf("failed to verify existing record: %w", getErr)
+			}
+			
+			// Compare values to ensure idempotency
+			existingValueJSON, _ := json.Marshal(existingRecord.Value)
+			newValueJSON, _ := json.Marshal(record.Value)
+			if string(existingValueJSON) == string(newValueJSON) {
+				log.Printf("Record with ID %s already exists with same value (idempotent operation)", record.ID)
+				return nil // Success - idempotent operation
+			}
+			
+			// Values are different - this is a conflict
+			return fmt.Errorf("record with id '%s' already exists but with different value", record.ID)
+		}
 		return fmt.Errorf("failed to insert record: %w", err)
 	}
 
