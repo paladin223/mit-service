@@ -21,11 +21,11 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '2.0'
+          memory: '2G'
+        reservations:
           cpus: '0.5'
           memory: '512M'
-        reservations:
-          cpus: '0.1'
-          memory: '128M'
 
   postgres-inbox:
     image: postgres:15
@@ -47,11 +47,11 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '2.0'
+          memory: '2G'
+        reservations:
           cpus: '0.5'
           memory: '512M'
-        reservations:
-          cpus: '0.1'
-          memory: '128M'
 
   mit-service:
     build: .
@@ -71,7 +71,8 @@ services:
       - INBOX_DB_SSLMODE=disable
       - REPOSITORY_TYPE=postgres
       - PORT=8080
-      - INBOX_WORKER_COUNT=50
+      - INBOX_WORKER_COUNT=10
+      - INBOX_POLL_INTERVAL=1s
     ports:
       - "8080:8080"
     depends_on:

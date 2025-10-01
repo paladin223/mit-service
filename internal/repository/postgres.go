@@ -185,13 +185,14 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, task *models.InboxT
 }
 
 // GetPendingTasks retrieves pending tasks from the inbox and atomically marks them as processing
+// Also recovers stuck processing tasks that haven't been updated for more than 5 minutes
 func (r *PostgresRepository) GetPendingTasks(ctx context.Context, limit int) ([]*models.InboxTask, error) {
-	// Use UPDATE ... RETURNING to atomically claim tasks
+	// Use UPDATE ... RETURNING to atomically claim tasks (both pending and stuck processing tasks)
 	query := `UPDATE inbox_tasks 
 			  SET status = $1, updated_at = NOW() 
 			  WHERE id IN (
 			      SELECT id FROM inbox_tasks 
-			      WHERE status = $2 
+			      WHERE (status = $2 OR (status = $1 AND updated_at < NOW() - INTERVAL '5 minutes'))
 			      ORDER BY created_at ASC 
 			      LIMIT $3 
 			      FOR UPDATE SKIP LOCKED

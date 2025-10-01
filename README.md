@@ -13,8 +13,14 @@ make docker-run
 curl http://localhost:8080/health
 
 # 3. Load testing
-pip3 install aiohttp
-python3 scripts/load_test.py --rps 50 --tasks 100
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r scripts/requirements.txt
+python scripts/populate_db.py --rps 100 --duration 600 --start 1220000
+python scripts/read_load_test.py --rps 100 --start-id 1220000
+
+# Статистика по памяти и загрузке процессора
+docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}"
 ```
 
 ## API Endpoints
