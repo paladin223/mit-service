@@ -27,31 +27,6 @@ services:
           cpus: '0.5'
           memory: '512M'
 
-  postgres-inbox:
-    image: postgres:15
-    container_name: postgres-inbox
-    environment:
-      POSTGRES_DB: mitservice_inbox
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_inbox_data:/var/lib/postgresql/data
-      - ./migrations/inbox:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mitservice_inbox"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: '2G'
-        reservations:
-          cpus: '0.5'
-          memory: '512M'
 
   mit-service:
     build: .
@@ -63,22 +38,12 @@ services:
       - DB_PASSWORD=password
       - DB_NAME=mitservice
       - DB_SSLMODE=disable
-      - INBOX_DB_HOST=postgres-inbox
-      - INBOX_DB_PORT=5432
-      - INBOX_DB_USER=postgres
-      - INBOX_DB_PASSWORD=password
-      - INBOX_DB_NAME=mitservice_inbox
-      - INBOX_DB_SSLMODE=disable
       - REPOSITORY_TYPE=postgres
       - PORT=8080
-      - INBOX_WORKER_COUNT=10
-      - INBOX_POLL_INTERVAL=1s
     ports:
       - "8080:8080"
     depends_on:
       postgres-main:
-        condition: service_healthy
-      postgres-inbox:
         condition: service_healthy
     restart: unless-stopped
     deploy:
@@ -146,7 +111,6 @@ services:
 
 volumes:
   postgres_main_data:
-  postgres_inbox_data:
   prometheus_data:
   grafana_data:
 

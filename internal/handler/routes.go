@@ -15,8 +15,7 @@ func SetupRoutes(service *service.Service, metrics *metrics.Metrics) *http.Serve
 	mux.HandleFunc("/health", h.withCORS(h.withMetrics(h.withLogging(h.Health))))
 
 	// Monitoring endpoints
-	mux.HandleFunc("/tasks", h.withCORS(h.withMetrics(h.withLogging(h.Tasks))))
-	mux.HandleFunc("/stats", h.withCORS(h.withMetrics(h.withLogging(h.TaskStats))))
+	mux.HandleFunc("/stats", h.withCORS(h.withMetrics(h.withLogging(h.Stats))))
 	mux.HandleFunc("/metrics", h.PrometheusMetrics) // No middleware to avoid recursive metrics
 	mux.HandleFunc("/performance", h.withCORS(h.withMetrics(h.withLogging(h.Performance))))
 

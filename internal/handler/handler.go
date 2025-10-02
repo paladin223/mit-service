@@ -7,7 +7,6 @@ import (
 	"mit-service/internal/models"
 	"mit-service/internal/service"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -66,9 +65,9 @@ func (h *Handler) Insert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Insert: queued insert task for record ID: %s", req.ID)
+	log.Printf("Insert: successfully inserted record ID: %s", req.ID)
 	h.writeJSONResponse(w, http.StatusCreated, models.SuccessResponse{
-		Message: "Insert task queued successfully",
+		Message: "Record inserted successfully",
 	})
 }
 
@@ -107,7 +106,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	// Success - no additional logging needed
 	h.writeJSONResponse(w, http.StatusOK, models.SuccessResponse{
-		Message: "Update task queued successfully",
+		Message: "Record updated successfully",
 	})
 }
 
@@ -140,7 +139,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	// Success - no additional logging needed
 	h.writeJSONResponse(w, http.StatusOK, models.SuccessResponse{
-		Message: "Delete task queued successfully",
+		Message: "Record deleted successfully",
 	})
 }
 
@@ -187,63 +186,36 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Tasks handles GET /tasks requests - shows current inbox tasks
-func (h *Handler) Tasks(w http.ResponseWriter, r *http.Request) {
+// Stats handles GET /stats requests - shows service statistics
+func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		h.writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	// Parse query parameters
-	status := r.URL.Query().Get("status")
-	limitStr := r.URL.Query().Get("limit")
-	offsetStr := r.URL.Query().Get("offset")
-
-	limit := 50 // default
-	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
-		}
-	}
-
-	offset := 0 // default
-	if offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil && parsedOffset >= 0 {
-			offset = parsedOffset
-		}
-	}
-
 	ctx := r.Context()
-	response, err := h.service.GetTasks(ctx, status, limit, offset)
+	stats, err := h.service.GetStats(ctx)
 	if err != nil {
-		log.Printf("Tasks: failed to get tasks: %v", err)
-		h.writeErrorResponse(w, http.StatusInternalServerError, "Failed to get tasks: "+err.Error())
+		log.Printf("Stats: failed to get service stats: %v", err)
+		h.writeErrorResponse(w, http.StatusInternalServerError, "Failed to get service stats: "+err.Error())
 		return
 	}
 
-	log.Printf("Tasks: retrieved %d tasks (status: %s, limit: %d, offset: %d)",
-		len(response.Tasks), status, limit, offset)
+	log.Printf("Service status: %s", stats.Status)
+
+	// For backward compatibility, return both formats
+	response := map[string]interface{}{
+		"status":    stats.Status,
+		"timestamp": stats.Timestamp,
+		// Legacy format for compatibility
+		"total_tasks":      0,
+		"pending_tasks":    0,
+		"processing_tasks": 0,
+		"completed_tasks":  0,
+		"failed_tasks":     0,
+	}
+
 	h.writeJSONResponse(w, http.StatusOK, response)
-}
-
-// TaskStats handles GET /stats requests - shows inbox tasks statistics
-func (h *Handler) TaskStats(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		h.writeErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
-		return
-	}
-
-	ctx := r.Context()
-	stats, err := h.service.GetTaskStats(ctx)
-	if err != nil {
-		log.Printf("TaskStats: failed to get task stats: %v", err)
-		h.writeErrorResponse(w, http.StatusInternalServerError, "Failed to get task stats: "+err.Error())
-		return
-	}
-
-	log.Printf("TaskStats: total=%d, pending=%d, processing=%d, completed=%d, failed=%d",
-		stats.TotalTasks, stats.PendingTasks, stats.ProcessingTasks, stats.CompletedTasks, stats.FailedTasks)
-	h.writeJSONResponse(w, http.StatusOK, stats)
 }
 
 // Metrics handles GET /metrics requests - shows performance metrics

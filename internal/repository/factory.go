@@ -33,21 +33,16 @@ func NewRepositoryManager(cfg *config.Config) (*RepositoryManager, error) {
 			return nil, fmt.Errorf("failed to create postgres record repository: %w", err)
 		}
 
-		inboxRepo, err := NewPostgresInboxRepository(cfg.InboxDB.ConnectionString())
-		if err != nil {
-			return nil, fmt.Errorf("failed to create postgres inbox repository: %w", err)
-		}
-
 		return &RepositoryManager{
 			Record: recordRepo,
-			Inbox:  inboxRepo,
+			Inbox:  nil, // No longer using inbox pattern
 		}, nil
 
 	case "mock":
 		repo := NewMockRepository()
 		return &RepositoryManager{
 			Record: repo,
-			Inbox:  repo,
+			Inbox:  nil, // No longer using inbox pattern
 		}, nil
 
 	default:

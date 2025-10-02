@@ -83,13 +83,19 @@ type DeleteTaskPayload struct {
 	ID string `json:"id"`
 }
 
-// TaskStats represents statistics about inbox tasks
+// TaskStats represents statistics about inbox tasks (deprecated - keeping for compatibility)
 type TaskStats struct {
 	TotalTasks      int `json:"total_tasks"`
 	PendingTasks    int `json:"pending_tasks"`
 	ProcessingTasks int `json:"processing_tasks"`
 	CompletedTasks  int `json:"completed_tasks"`
 	FailedTasks     int `json:"failed_tasks"`
+}
+
+// SimpleStats represents simple service statistics without inbox
+type SimpleStats struct {
+	Status    string    `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // TasksListResponse represents the response for tasks list

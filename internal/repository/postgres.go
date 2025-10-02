@@ -51,8 +51,7 @@ func (r *PostgresRepository) initSchema() error {
 		`CREATE TABLE IF NOT EXISTS records (
 			id VARCHAR(255) PRIMARY KEY,
 			value JSONB NOT NULL,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 		)`,
 		`CREATE TABLE IF NOT EXISTS inbox_tasks (
 			id VARCHAR(255) PRIMARY KEY,
@@ -105,7 +104,7 @@ func (r *PostgresRepository) Update(ctx context.Context, record *models.Record) 
 		return fmt.Errorf("failed to marshal value: %w", err)
 	}
 
-	query := `UPDATE records SET value = $2, updated_at = NOW() WHERE id = $1`
+	query := `UPDATE records SET value = $2 WHERE id = $1`
 	result, err := r.db.ExecContext(ctx, query, record.ID, valueJSON)
 	if err != nil {
 		return fmt.Errorf("failed to update record: %w", err)

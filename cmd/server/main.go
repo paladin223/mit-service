@@ -34,17 +34,7 @@ func main() {
 
 	// Initialize service
 	svc := service.NewService(repoManager, appMetrics)
-
-	// Start inbox worker
-	svc.StartInboxWorker(
-		cfg.InboxWorker.WorkerCount,
-		cfg.InboxWorker.BatchSize,
-		cfg.InboxWorker.PollInterval,
-		cfg.InboxWorker.MaxRetries,
-		cfg.InboxWorker.RetryDelay,
-	)
-
-	log.Printf("Inbox worker started with %d workers", cfg.InboxWorker.WorkerCount)
+	log.Println("Service initialized for direct database operations")
 
 	// Setup HTTP routes
 	mux := handler.SetupRoutes(svc, appMetrics)
@@ -71,8 +61,7 @@ func main() {
 	log.Printf("  Health check:  http://localhost:%s/health", cfg.Server.Port)
 	log.Printf("  Performance:   http://localhost:%s/performance", cfg.Server.Port)
 	log.Printf("  Metrics:       http://localhost:%s/metrics", cfg.Server.Port)
-	log.Printf("  Task stats:    http://localhost:%s/stats", cfg.Server.Port)
-	log.Printf("  Task list:     http://localhost:%s/tasks?status=<status>&limit=<limit>&offset=<offset>", cfg.Server.Port)
+	log.Printf("  Stats:         http://localhost:%s/stats", cfg.Server.Port)
 	log.Printf("  Insert:        POST http://localhost:%s/insert", cfg.Server.Port)
 	log.Printf("  Update:        POST http://localhost:%s/update", cfg.Server.Port)
 	log.Printf("  Delete:        POST http://localhost:%s/delete", cfg.Server.Port)
@@ -101,12 +90,6 @@ func main() {
 	if repoManager.Record != nil {
 		if err := repoManager.Record.Close(); err != nil {
 			log.Printf("Error closing record repository: %v", err)
-		}
-	}
-
-	if repoManager.Inbox != nil {
-		if err := repoManager.Inbox.Close(); err != nil {
-			log.Printf("Error closing inbox repository: %v", err)
 		}
 	}
 
